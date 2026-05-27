@@ -281,7 +281,7 @@ export default function App() {
   };
 
   const handleVoiceToggle = (enabled) => {
-    if (enabled && isNativeAndroid && !nativeSpeechAvailable) {
+    if (enabled && isNativeAndroid && voiceSource === 'system' && !nativeSpeechAvailable) {
       setVoiceEnabled(false);
       setToastMsg('当前设备未安装文字转语音引擎，请先在系统设置中安装或启用。');
       setTimeout(() => setToastMsg(''), 4000);
@@ -290,6 +290,16 @@ export default function App() {
     }
 
     setVoiceEnabled(enabled);
+  };
+
+  const handleVoiceSourceChange = (source) => {
+    if (source === 'system' && isNativeAndroid && !nativeSpeechAvailable) {
+      setToastMsg('当前设备未安装文字转语音引擎，请先在系统设置中安装或启用。');
+      setTimeout(() => setToastMsg(''), 4000);
+      void openNativeSpeechSettings();
+      return;
+    }
+    setVoiceSource(source);
   };
 
   const playStudyFeedbackSound = (correct) => {
@@ -1139,7 +1149,7 @@ export default function App() {
             {voiceEnabled && (
               <select 
                 value={voiceSource} 
-                onChange={(e) => setVoiceSource(e.target.value)}
+                onChange={(e) => handleVoiceSourceChange(e.target.value)}
                 className="voice-source-select"
               >
                 <option value="embedded">预置男声(云希)</option>
