@@ -840,7 +840,9 @@ export default function App() {
                     📝 发现未完成的 2025 年学习进度
                   </h3>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.6' }}>
-                    题库: 2025年真题突破 | 进度: 第 {savedStudy2025.index + 1} 题 / 共 {savedStudy2025.questions.length} 题 | 已答: {savedStudy2025.history.length} 题<br />
+                    题库: 2025年真题突破 | 进度: 第 {savedStudy2025.index + 1} 题 / 共 {savedStudy2025.questions.length} 题 | 已答: {savedStudy2025.history.length} 题
+                    {savedStudy2025.history.length > 0 && ` | 当前正确率: ${Math.round((savedStudy2025.history.filter(h => h.correct).length / savedStudy2025.history.length) * 100)}%`}
+                    <br />
                     已学用时: <span style={{ color: 'var(--text-bright)', fontWeight: 500 }}>{formatTime(savedStudy2025.timeUsed || 0)}</span> | 上次退出时间: <span style={{ color: 'var(--text-bright)', fontWeight: 500 }}>{savedStudy2025.lastExitTime || '无'}</span>
                   </p>
                 </div>
@@ -871,7 +873,9 @@ export default function App() {
                     🎯 发现未完成的 2026 年预测题学习进度
                   </h3>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.6' }}>
-                    题库: 2026年预测考题 | 进度: 第 {savedStudy2026.index + 1} 题 / 共 {savedStudy2026.questions.length} 题 | 已答: {savedStudy2026.history.length} 题<br />
+                    题库: 2026年预测考题 | 进度: 第 {savedStudy2026.index + 1} 题 / 共 {savedStudy2026.questions.length} 题 | 已答: {savedStudy2026.history.length} 题
+                    {savedStudy2026.history.length > 0 && ` | 当前正确率: ${Math.round((savedStudy2026.history.filter(h => h.correct).length / savedStudy2026.history.length) * 100)}%`}
+                    <br />
                     已学用时: <span style={{ color: 'var(--text-bright)', fontWeight: 500 }}>{formatTime(savedStudy2026.timeUsed || 0)}</span> | 上次退出时间: <span style={{ color: 'var(--text-bright)', fontWeight: 500 }}>{savedStudy2026.lastExitTime || '无'}</span>
                   </p>
                 </div>
@@ -1074,6 +1078,11 @@ export default function App() {
               </div>
               
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                {studyHistory.length > 0 && (
+                  <span className="meta-pill" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.2)' }}>
+                    🎯 当前正确率: {Math.round((studyHistory.filter(h => h.correct).length / studyHistory.length) * 100)}%
+                  </span>
+                )}
                 <span className="meta-pill">
                   ⏱️ 已用时: {formatTime(studySecondsUsed)}
                 </span>
