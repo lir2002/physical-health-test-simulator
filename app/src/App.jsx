@@ -1,6 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import q2025Data from './data/questions-2025.json';
 import q2026Data from './data/questions-2026.json';
+
+const NativeSpeech = registerPlugin('NativeSpeech');
+const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+const navigableViews = new Set(['dashboard', 'study-setup', 'study', 'exam-setup', 'exam', 'report-detail', 'history']);
+
+function viewFromHash() {
+  if (typeof window === 'undefined') return 'dashboard';
+
+  const hashView = window.location.hash.replace(/^#/, '');
+  return navigableViews.has(hashView) ? hashView : 'dashboard';
+}
 
 // Fisher-Yates Shuffle
 function shuffle(array) {
@@ -12,23 +24,120 @@ function shuffle(array) {
   return arr;
 }
 
+function readStorageValue(key) {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+
+  try {
+    return window.localStorage.getItem(key);
+  } catch (e) {
+    console.warn(`Unable to read ${key} from localStorage`, e);
+    return null;
+  }
+}
+
+function writeStorageValue(key, value) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn(`Unable to write ${key} to localStorage`, e);
+  }
+}
+
+function removeStorageValue(key) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+
+  try {
+    window.localStorage.removeItem(key);
+  } catch (e) {
+    console.warn(`Unable to remove ${key} from localStorage`, e);
+  }
+}
+
+function readStorageJson(key, fallback) {
+  const saved = readStorageValue(key);
+  if (!saved) return fallback;
+
+  try {
+    return JSON.parse(saved);
+  } catch (e) {
+    console.warn(`Ignoring invalid ${key} value in localStorage`, e);
+    removeStorageValue(key);
+    return fallback;
+  }
+}
+
+function getSpeechSynthesis() {
+  return typeof window !== 'undefined' ? window.speechSynthesis : null;
+}
+
+async function cancelNativeSpeech() {
+  if (!isNativeAndroid) return false;
+
+  try {
+    await NativeSpeech.stop();
+    return true;
+  } catch (e) {
+    console.warn('Native speech stop failed', e);
+    return false;
+  }
+}
+
+function cancelWebSpeech() {
+  const speech = getSpeechSynthesis();
+  if (!speech) return;
+
+  try {
+    speech.cancel();
+  } catch (e) {
+    console.warn('Speech synthesis cancel failed', e);
+  }
+}
+
+function cancelSpeech() {
+  if (isNativeAndroid) {
+    void cancelNativeSpeech();
+    return;
+  }
+
+  cancelWebSpeech();
+}
+
+async function openNativeSpeechSettings() {
+  if (!isNativeAndroid) return;
+
+  try {
+    await NativeSpeech.openSettings();
+  } catch (e) {
+    console.warn('Unable to open native speech settings', e);
+  }
+}
+
 export default function App() {
   // Views: 'dashboard', 'study-setup', 'study', 'exam-setup', 'exam', 'report-detail', 'history'
   const [view, setView] = useState('dashboard');
+  const viewRef = useRef('dashboard');
+  const applyingHistoryNavigationRef = useRef(false);
   
   // Voice engine state
   const [voiceEnabled, setVoiceEnabled] = useState(() => {
-    const saved = localStorage.getItem('voice_enabled');
+    const saved = readStorageValue('voice_enabled');
     return saved === 'true';
   });
 
   const [selectedVoice, setSelectedVoice] = useState(null);
+  const [nativeSpeechAvailable, setNativeSpeechAvailable] = useState(!isNativeAndroid);
+  const speechSettingsPromptedRef = useRef(false);
 
   // Load voices and select preferred Chinese male voice
   useEffect(() => {
+    if (isNativeAndroid) return;
+
     const loadVoices = () => {
-      if (typeof window === 'undefined' || !window.speechSynthesis) return;
-      const allVoices = window.speechSynthesis.getVoices();
+      const speech = getSpeechSynthesis();
+      if (!speech) return;
+      const allVoices = speech.getVoices();
       const zhVoices = allVoices.filter(v => v.lang.toLowerCase().includes('zh'));
       
       if (zhVoices.length > 0) {
@@ -42,15 +151,43 @@ export default function App() {
     };
 
     loadVoices();
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
+    const speech = getSpeechSynthesis();
+    if (speech) {
+      speech.onvoiceschanged = loadVoices;
     }
+
+    return () => {
+      if (speech && speech.onvoiceschanged === loadVoices) {
+        speech.onvoiceschanged = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isNativeAndroid) return;
+
+    const checkNativeSpeech = () => {
+      NativeSpeech.isAvailable()
+        .then((result) => {
+          setNativeSpeechAvailable(Boolean(result.available));
+        })
+        .catch((e) => {
+          console.warn('Native speech availability check failed', e);
+          setNativeSpeechAvailable(false);
+        });
+    };
+
+    checkNativeSpeech();
+    document.addEventListener('visibilitychange', checkNativeSpeech);
+
+    return () => {
+      document.removeEventListener('visibilitychange', checkNativeSpeech);
+    };
   }, []);
   
   // History data
   const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem('simulator_history');
-    return saved ? JSON.parse(saved) : [];
+    return readStorageJson('simulator_history', []);
   });
 
   // Current session variables
@@ -59,34 +196,120 @@ export default function App() {
   // Voice utility
   const speakText = (text) => {
     if (!voiceEnabled) return;
+    if (isNativeAndroid) {
+      if (!nativeSpeechAvailable) {
+        setToastMsg('当前设备未安装文字转语音引擎，请先在系统设置中安装或启用。');
+        setTimeout(() => setToastMsg(''), 4000);
+        if (!speechSettingsPromptedRef.current) {
+          speechSettingsPromptedRef.current = true;
+          void openNativeSpeechSettings();
+        }
+        return;
+      }
+
+      NativeSpeech.speak({ text, rate: 1.0 }).catch((e) => {
+        console.error('Native speech failed', e);
+        setNativeSpeechAvailable(false);
+        setToastMsg('文字转语音不可用，请检查系统 TTS 引擎设置。');
+        setTimeout(() => setToastMsg(''), 4000);
+        if (!speechSettingsPromptedRef.current) {
+          speechSettingsPromptedRef.current = true;
+          void openNativeSpeechSettings();
+        }
+      });
+      return;
+    }
+
+    const speech = getSpeechSynthesis();
+    if (!speech || typeof SpeechSynthesisUtterance === 'undefined') return;
+
     try {
-      window.speechSynthesis.cancel();
+      cancelWebSpeech();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'zh-CN';
       utterance.rate = 1.0;
       if (selectedVoice) {
         utterance.voice = selectedVoice;
       }
-      window.speechSynthesis.speak(utterance);
+      speech.speak(utterance);
     } catch (e) {
       console.error("Speech synthesis failed", e);
     }
   };
 
+  const handleVoiceToggle = (enabled) => {
+    if (enabled && isNativeAndroid && !nativeSpeechAvailable) {
+      setVoiceEnabled(false);
+      setToastMsg('当前设备未安装文字转语音引擎，请先在系统设置中安装或启用。');
+      setTimeout(() => setToastMsg(''), 4000);
+      void openNativeSpeechSettings();
+      return;
+    }
+
+    setVoiceEnabled(enabled);
+  };
+
   useEffect(() => {
-    localStorage.setItem('voice_enabled', voiceEnabled);
+    writeStorageValue('voice_enabled', voiceEnabled);
     if (!voiceEnabled) {
-      window.speechSynthesis.cancel(); // Stop reading immediately when toggled off
+      cancelSpeech(); // Stop reading immediately when toggled off
     }
   }, [voiceEnabled]);
 
   useEffect(() => {
-    localStorage.setItem('simulator_history', JSON.stringify(history));
+    writeStorageValue('simulator_history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    window.history.replaceState(null, '', '#dashboard');
+
+    const handleHashChange = () => {
+      const nextView = viewFromHash();
+      if (nextView === viewRef.current) return;
+
+      applyingHistoryNavigationRef.current = true;
+      if (nextView === 'dashboard') {
+        setShowExitStudyModal(false);
+        setShowDropProgressModal(false);
+        cancelSpeech();
+      }
+      setView(nextView);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (applyingHistoryNavigationRef.current) {
+      applyingHistoryNavigationRef.current = false;
+      return;
+    }
+
+    const targetHash = `#${view}`;
+    if (view !== 'dashboard') {
+      if (window.location.hash !== targetHash) {
+        window.location.hash = view;
+      }
+    } else if (window.location.hash !== targetHash) {
+      window.history.replaceState(null, '', targetHash);
+    }
+  }, [view]);
 
   // Clean speech when switching screens
   useEffect(() => {
-    window.speechSynthesis.cancel();
+    cancelSpeech();
   }, [view]);
 
   // ==========================================
@@ -114,14 +337,12 @@ export default function App() {
 
   // Loaded saved study session 2025 if any
   const [savedStudy2025, setSavedStudy2025] = useState(() => {
-    const saved = localStorage.getItem('saved_study_session_2025');
-    return saved ? JSON.parse(saved) : null;
+    return readStorageJson('saved_study_session_2025', null);
   });
 
   // Loaded saved study session 2026 if any
   const [savedStudy2026, setSavedStudy2026] = useState(() => {
-    const saved = localStorage.getItem('saved_study_session_2026');
-    return saved ? JSON.parse(saved) : null;
+    return readStorageJson('saved_study_session_2026', null);
   });
 
   // Study Timer effect
@@ -139,10 +360,10 @@ export default function App() {
   const saveStudyProgress = (showToast = false) => {
     if (studyHistory.length === 0) {
       if (studyPoolYear === 2025) {
-        localStorage.removeItem('saved_study_session_2025');
+        removeStorageValue('saved_study_session_2025');
         setSavedStudy2025(null);
       } else {
-        localStorage.removeItem('saved_study_session_2026');
+        removeStorageValue('saved_study_session_2026');
         setSavedStudy2026(null);
       }
       return;
@@ -158,10 +379,10 @@ export default function App() {
     };
     
     if (studyPoolYear === 2025) {
-      localStorage.setItem('saved_study_session_2025', JSON.stringify(session));
+      writeStorageValue('saved_study_session_2025', JSON.stringify(session));
       setSavedStudy2025(session);
     } else {
-      localStorage.setItem('saved_study_session_2026', JSON.stringify(session));
+      writeStorageValue('saved_study_session_2026', JSON.stringify(session));
       setSavedStudy2026(session);
     }
     
@@ -184,10 +405,10 @@ export default function App() {
     
     // Proceed to start fresh for this year
     if (year === 2025) {
-      localStorage.removeItem('saved_study_session_2025');
+      removeStorageValue('saved_study_session_2025');
       setSavedStudy2025(null);
     } else {
-      localStorage.removeItem('saved_study_session_2026');
+      removeStorageValue('saved_study_session_2026');
       setSavedStudy2026(null);
     }
 
@@ -295,14 +516,14 @@ export default function App() {
   const exitStudyWithReport = () => {
     setShowExitStudyModal(false);
     if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-    window.speechSynthesis.cancel();
+    cancelSpeech();
     
     // Clear saved progress for current year
     if (studyPoolYear === 2025) {
-      localStorage.removeItem('saved_study_session_2025');
+      removeStorageValue('saved_study_session_2025');
       setSavedStudy2025(null);
     } else {
-      localStorage.removeItem('saved_study_session_2026');
+      removeStorageValue('saved_study_session_2026');
       setSavedStudy2026(null);
     }
 
@@ -338,7 +559,7 @@ export default function App() {
   const exitStudyWithProgress = () => {
     setShowExitStudyModal(false);
     if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-    window.speechSynthesis.cancel();
+    cancelSpeech();
     saveStudyProgress();
     setView('dashboard');
   };
@@ -346,14 +567,14 @@ export default function App() {
   const exitStudyDiscard = () => {
     setShowExitStudyModal(false);
     if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-    window.speechSynthesis.cancel();
+    cancelSpeech();
     
     // Clear progress for current year
     if (studyPoolYear === 2025) {
-      localStorage.removeItem('saved_study_session_2025');
+      removeStorageValue('saved_study_session_2025');
       setSavedStudy2025(null);
     } else {
-      localStorage.removeItem('saved_study_session_2026');
+      removeStorageValue('saved_study_session_2026');
       setSavedStudy2026(null);
     }
     
@@ -386,10 +607,10 @@ export default function App() {
     setHistory(prev => [report, ...prev]);
     
     if (droppingYear === 2025) {
-      localStorage.removeItem('saved_study_session_2025');
+      removeStorageValue('saved_study_session_2025');
       setSavedStudy2025(null);
     } else {
-      localStorage.removeItem('saved_study_session_2026');
+      removeStorageValue('saved_study_session_2026');
       setSavedStudy2026(null);
     }
     setShowDropProgressModal(false);
@@ -397,10 +618,10 @@ export default function App() {
 
   const dropProgressDiscard = () => {
     if (droppingYear === 2025) {
-      localStorage.removeItem('saved_study_session_2025');
+      removeStorageValue('saved_study_session_2025');
       setSavedStudy2025(null);
     } else {
-      localStorage.removeItem('saved_study_session_2026');
+      removeStorageValue('saved_study_session_2026');
       setSavedStudy2026(null);
     }
     setShowDropProgressModal(false);
@@ -408,14 +629,14 @@ export default function App() {
 
   const finishStudy = () => {
     if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
-    window.speechSynthesis.cancel();
+    cancelSpeech();
     
     // Clear saved progress for current year
     if (studyPoolYear === 2025) {
-      localStorage.removeItem('saved_study_session_2025');
+      removeStorageValue('saved_study_session_2025');
       setSavedStudy2025(null);
     } else {
-      localStorage.removeItem('saved_study_session_2026');
+      removeStorageValue('saved_study_session_2026');
       setSavedStudy2026(null);
     }
     
@@ -775,10 +996,10 @@ export default function App() {
     if (view === 'study') {
       if (studyHistory.length === 0) {
         if (studyPoolYear === 2025) {
-          localStorage.removeItem('saved_study_session_2025');
+          removeStorageValue('saved_study_session_2025');
           setSavedStudy2025(null);
         } else {
-          localStorage.removeItem('saved_study_session_2026');
+          removeStorageValue('saved_study_session_2026');
           setSavedStudy2026(null);
         }
         setView('dashboard');
@@ -802,7 +1023,10 @@ export default function App() {
         <div className="logo" onClick={handleHeaderHomeClick}>
           <div className="logo-icon">PH</div>
           <div className="logo-text">
-            <h3>体育与健康测试 <span className="title-gradient">智能模拟训练系统</span></h3>
+            <h3>
+              <span className="brand-main">2026 深圳市体育与健康科目测试</span>
+              <span className="title-gradient brand-sub">模拟训练系统</span>
+            </h3>
           </div>
         </div>
         
@@ -814,12 +1038,12 @@ export default function App() {
               <input 
                 type="checkbox" 
                 checked={voiceEnabled} 
-                onChange={(e) => setVoiceEnabled(e.target.checked)} 
+                onChange={(e) => handleVoiceToggle(e.target.checked)} 
               />
               <span className="slider"></span>
             </label>
           </div>
-          
+
           {view !== 'dashboard' && (
             <button className="btn btn-secondary" onClick={handleHeaderHomeClick}>
               返回主页
@@ -909,40 +1133,40 @@ export default function App() {
             </p>
             
             {/* Quick stats grid */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'center' }}>
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '1rem 2rem', borderRadius: 'var(--radius-md)', minWidth: '150px' }}>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+            <div className="home-stats-grid">
+              <div className="home-stat-card">
+                <div className="home-stat-value" style={{ color: 'var(--color-primary)' }}>
                   {history.filter(h => h.type === 'study').length}
                 </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>累计学习场次</div>
+                <div className="home-stat-label">累计学习场次</div>
               </div>
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '1rem 2rem', borderRadius: 'var(--radius-md)', minWidth: '150px' }}>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-secondary)' }}>
+              <div className="home-stat-card">
+                <div className="home-stat-value" style={{ color: 'var(--color-secondary)' }}>
                   {history.filter(h => h.type === 'study').length > 0 
                     ? Math.round(history.filter(h => h.type === 'study').reduce((acc, h) => acc + h.accuracy, 0) / history.filter(h => h.type === 'study').length) 
                     : 0}%
                 </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>平均学习正确率</div>
+                <div className="home-stat-label">平均学习正确率</div>
               </div>
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '1rem 2rem', borderRadius: 'var(--radius-md)', minWidth: '150px' }}>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-success)' }}>
+              <div className="home-stat-card">
+                <div className="home-stat-value" style={{ color: 'var(--color-success)' }}>
                   {history.filter(h => h.type === 'exam').length}
                 </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>累计考试场次</div>
+                <div className="home-stat-label">累计考试场次</div>
               </div>
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '1rem 2rem', borderRadius: 'var(--radius-md)', minWidth: '150px' }}>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-success)' }}>
+              <div className="home-stat-card">
+                <div className="home-stat-value" style={{ color: 'var(--color-success)' }}>
                   {history.filter(h => h.type === 'exam').length > 0 
                     ? Math.round(history.filter(h => h.type === 'exam').reduce((acc, h) => acc + (h.score || 0), 0) / history.filter(h => h.type === 'exam').length)
                     : 0}
                 </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>模拟考平均分</div>
+                <div className="home-stat-label">模拟考平均分</div>
               </div>
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '1rem 2rem', borderRadius: 'var(--radius-md)', minWidth: '150px' }}>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-accent)' }}>
+              <div className="home-stat-card">
+                <div className="home-stat-value" style={{ color: 'var(--color-accent)' }}>
                   {formatTime(history.filter(h => h.type === 'study').reduce((acc, h) => acc + (h.timeUsed || 0), 0))}
                 </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>累计学习用时</div>
+                <div className="home-stat-label">累计学习用时</div>
               </div>
             </div>
           </div>
