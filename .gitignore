@@ -29,3 +29,8 @@ app/dist-ssr/
 
 # CLI folders
 .antigravitycli/
+
+# Local scratch and screenshots
+scratch/
+*.jpg
+*.png

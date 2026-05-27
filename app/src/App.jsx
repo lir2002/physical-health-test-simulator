@@ -84,6 +84,8 @@ async function cancelNativeSpeech() {
   }
 }
 
+let activeAudio = null;
+
 function cancelWebSpeech() {
   const speech = getSpeechSynthesis();
   if (!speech) return;
@@ -96,6 +98,16 @@ function cancelWebSpeech() {
 }
 
 function cancelSpeech() {
+  if (activeAudio) {
+    try {
+      activeAudio.pause();
+      activeAudio.currentTime = 0;
+    } catch (e) {
+      console.warn('Error pausing HTML5 audio', e);
+    }
+    activeAudio = null;
+  }
+
   if (isNativeAndroid) {
     void cancelNativeSpeech();
     return;
@@ -125,6 +137,15 @@ export default function App() {
     const saved = readStorageValue('voice_enabled');
     return saved === 'true';
   });
+
+  const [voiceSource, setVoiceSource] = useState(() => {
+    const saved = readStorageValue('voice_source');
+    return saved || 'embedded';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('voice_source', voiceSource);
+  }, [voiceSource]);
 
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [nativeSpeechAvailable, setNativeSpeechAvailable] = useState(!isNativeAndroid);
@@ -194,47 +215,69 @@ export default function App() {
   const [currentReport, setCurrentReport] = useState(null);
   
   // Voice utility
-  const speakText = (text) => {
+  const speakText = (text, qId) => {
     if (!voiceEnabled) return;
-    if (isNativeAndroid) {
-      if (!nativeSpeechAvailable) {
-        setToastMsg('当前设备未安装文字转语音引擎，请先在系统设置中安装或启用。');
-        setTimeout(() => setToastMsg(''), 4000);
-        if (!speechSettingsPromptedRef.current) {
-          speechSettingsPromptedRef.current = true;
-          void openNativeSpeechSettings();
+
+    const speakSystemText = () => {
+      if (isNativeAndroid) {
+        if (!nativeSpeechAvailable) {
+          setToastMsg('当前设备未安装文字转语音引擎，请先在系统设置中安装或启用。');
+          setTimeout(() => setToastMsg(''), 4000);
+          if (!speechSettingsPromptedRef.current) {
+            speechSettingsPromptedRef.current = true;
+            void openNativeSpeechSettings();
+          }
+          return;
         }
+
+        NativeSpeech.speak({ text, rate: 1.0 }).catch((e) => {
+          console.error('Native speech failed', e);
+          setNativeSpeechAvailable(false);
+          setToastMsg('文字转语音不可用，请检查系统 TTS 引擎设置。');
+          setTimeout(() => setToastMsg(''), 4000);
+          if (!speechSettingsPromptedRef.current) {
+            speechSettingsPromptedRef.current = true;
+            void openNativeSpeechSettings();
+          }
+        });
         return;
       }
 
-      NativeSpeech.speak({ text, rate: 1.0 }).catch((e) => {
-        console.error('Native speech failed', e);
-        setNativeSpeechAvailable(false);
-        setToastMsg('文字转语音不可用，请检查系统 TTS 引擎设置。');
-        setTimeout(() => setToastMsg(''), 4000);
-        if (!speechSettingsPromptedRef.current) {
-          speechSettingsPromptedRef.current = true;
-          void openNativeSpeechSettings();
+      const speech = getSpeechSynthesis();
+      if (!speech || typeof SpeechSynthesisUtterance === 'undefined') return;
+
+      try {
+        cancelWebSpeech();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'zh-CN';
+        utterance.rate = 1.0;
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
         }
-      });
+        speech.speak(utterance);
+      } catch (e) {
+        console.error("Speech synthesis failed", e);
+      }
+    };
+
+    if (voiceSource === 'embedded' && qId) {
+      try {
+        cancelSpeech();
+        const audioUrl = `./audio/${qId}.mp3`;
+        const audio = new Audio(audioUrl);
+        activeAudio = audio;
+        audio.play().catch(e => {
+          console.warn('Embedded audio play failed, falling back to system speech', e);
+          speakSystemText();
+        });
+      } catch (e) {
+        console.warn('Embedded speech failed, falling back to system speech', e);
+        speakSystemText();
+      }
       return;
     }
 
-    const speech = getSpeechSynthesis();
-    if (!speech || typeof SpeechSynthesisUtterance === 'undefined') return;
-
-    try {
-      cancelWebSpeech();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'zh-CN';
-      utterance.rate = 1.0;
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-      }
-      speech.speak(utterance);
-    } catch (e) {
-      console.error("Speech synthesis failed", e);
-    }
+    speakSystemText();
   };
 
   const handleVoiceToggle = (enabled) => {
@@ -530,7 +573,7 @@ export default function App() {
       }, 3000);
     } else {
       // Let the wrong-answer cue finish before any explanation readout starts.
-      setTimeout(() => speakText(q.explanation), 450);
+      setTimeout(() => speakText(q.explanation, q.id), 450);
     }
   };
 
@@ -1083,10 +1126,9 @@ export default function App() {
         </div>
         
         <div className="nav-actions">
-          {/* Voice toggle in corner */}
           <div className="voice-switcher-container">
             <span className="voice-label">🔊 错题解读朗读</span>
-            <label className="switch">
+            <label className="switch" style={{ marginRight: voiceEnabled ? '0.25rem' : '0' }}>
               <input 
                 type="checkbox" 
                 checked={voiceEnabled} 
@@ -1094,6 +1136,16 @@ export default function App() {
               />
               <span className="slider"></span>
             </label>
+            {voiceEnabled && (
+              <select 
+                value={voiceSource} 
+                onChange={(e) => setVoiceSource(e.target.value)}
+                className="voice-source-select"
+              >
+                <option value="embedded">预置男声(云希)</option>
+                <option value="system">系统 TTS</option>
+              </select>
+            )}
           </div>
 
           {view !== 'dashboard' && (
@@ -1856,7 +1908,7 @@ export default function App() {
                     onClick={() => {
                       setReviewIdx(idx);
                       // Trigger speech readout of description automatically if voice switch is enabled
-                      speakText(q.explanation);
+                      speakText(q.explanation, q.id);
                     }}
                   >
                     {idx + 1}
@@ -1938,7 +1990,7 @@ export default function App() {
                     <button 
                       className="btn btn-secondary" 
                       style={{ padding: '0.1rem 0.5rem', fontSize: '0.7rem' }} 
-                      onClick={() => speakText(currentReport.details[reviewIdx].explanation)}
+                      onClick={() => speakText(currentReport.details[reviewIdx].explanation, currentReport.details[reviewIdx].id)}
                     >
                       🔊 重新播放朗读
                     </button>

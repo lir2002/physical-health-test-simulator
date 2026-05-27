@@ -274,6 +274,28 @@ header.app-header {
   white-space: nowrap;
 }
 
+.voice-source-select {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-bright);
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.voice-source-select:hover, .voice-source-select:focus {
+  border-color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.voice-source-select option {
+  background: #18181e;
+  color: var(--text-bright);
+}
+
 .switch {
   position: relative;
   display: inline-block;

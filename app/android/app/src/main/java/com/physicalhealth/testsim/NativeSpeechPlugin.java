@@ -30,19 +30,20 @@ public class NativeSpeechPlugin extends Plugin implements TextToSpeech.OnInitLis
 
     @Override
     public void load() {
-        hasEngine = hasTextToSpeechEngine();
-        if (!hasEngine) {
-            Log.w(TAG, "No Android TextToSpeech engine is installed");
-            return;
+        hasEngine = true; // Assume available by default; set to false if onInit fails
+        try {
+            textToSpeech = new TextToSpeech(getContext(), this);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to initialize TextToSpeech", e);
+            hasEngine = false;
         }
-
-        textToSpeech = new TextToSpeech(getContext(), this);
     }
 
     @Override
     public void onInit(int status) {
         ready = status == TextToSpeech.SUCCESS;
         if (ready) {
+            hasEngine = true;
             int languageResult = textToSpeech.setLanguage(Locale.CHINA);
             if (languageResult == TextToSpeech.LANG_MISSING_DATA
                     || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
@@ -57,6 +58,7 @@ public class NativeSpeechPlugin extends Plugin implements TextToSpeech.OnInitLis
             }
         } else {
             Log.e(TAG, "TextToSpeech initialization failed with status " + status);
+            hasEngine = false;
         }
 
         if (pendingSpeakCall != null) {
@@ -85,7 +87,7 @@ public class NativeSpeechPlugin extends Plugin implements TextToSpeech.OnInitLis
             return;
         }
 
-        if (!hasEngine) {
+        if (!hasEngine && !ready) {
             call.reject("No Android TextToSpeech engine is installed");
             return;
         }
@@ -94,7 +96,13 @@ public class NativeSpeechPlugin extends Plugin implements TextToSpeech.OnInitLis
             pendingSpeakCall = call;
             pendingText = text;
             pendingRate = rate;
-            textToSpeech = new TextToSpeech(getContext(), this);
+            try {
+                textToSpeech = new TextToSpeech(getContext(), this);
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to instantiate TextToSpeech", e);
+                hasEngine = false;
+                call.reject("Failed to instantiate TextToSpeech");
+            }
             return;
         }
 
@@ -122,7 +130,7 @@ public class NativeSpeechPlugin extends Plugin implements TextToSpeech.OnInitLis
     @PluginMethod
     public void isAvailable(PluginCall call) {
         JSObject ret = new JSObject();
-        ret.put("available", hasTextToSpeechEngine());
+        ret.put("available", hasEngine);
         ret.put("ready", ready);
         call.resolve(ret);
     }
