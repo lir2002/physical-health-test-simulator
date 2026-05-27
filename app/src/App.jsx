@@ -110,6 +110,7 @@ export default function App() {
   const [droppingYear, setDroppingYear] = useState(2025);
   const [exitTrigger, setExitTrigger] = useState('end-study'); // 'end-study' or 'return-home'
   const [trendTab, setTrendTab] = useState('study'); // 'study' or 'exam'
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
 
   // Loaded saved study session 2025 if any
   const [savedStudy2025, setSavedStudy2025] = useState(() => {
@@ -1008,53 +1009,93 @@ export default function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.5rem' }}>📜 历史记录</h2>
               </div>
+
+              {history.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <input
+                    type="text"
+                    placeholder="🔍 搜索报告名称或日期..."
+                    value={historySearchQuery}
+                    onChange={(e) => setHistorySearchQuery(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.6rem 1rem',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-bright)',
+                      outline: 'none',
+                      fontSize: '0.9rem',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = 'var(--color-primary)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                  />
+                </div>
+              )}
               
               {history.length === 0 ? (
                 <div style={{ textAlign: 'center', margin: 'auto 0', padding: '2rem 0', color: 'var(--text-muted)' }}>
                   <p>📭 暂无做题历史，快去挑战你的第一次练习吧！</p>
                 </div>
-              ) : (
-                <div className="history-list">
-                  {history.map((h) => {
-                    const isExam = h.type === 'exam';
-                    const badgeClass = isExam 
-                      ? (h.score >= 80 ? 'history-score-success' : (h.score >= 60 ? 'history-score-warning' : 'history-score-error'))
-                      : (h.accuracy >= 80 ? 'history-score-success' : (h.accuracy >= 60 ? 'history-score-warning' : 'history-score-error'));
-                    
-                    return (
-                      <div key={h.id} className="history-item">
-                        <div className="history-info">
-                          <span className="history-type">
-                            {isExam ? '📝 ' : '📖 '} {h.title}
-                          </span>
-                          <span className="history-date">{h.date}</span>
-                        </div>
-                        <div className={`history-score-badge ${badgeClass}`}>
-                          {isExam ? `${h.score} 分` : `正确率 ${h.accuracy}%`}
-                          <div style={{ fontSize: '0.7rem', opacity: 0.8, marginTop: '0.2rem' }}>
-                            {isExam ? `错 ${h.wrong} / 答 ${h.total}` : `练习数 ${h.total}`}
+              ) : (() => {
+                const filtered = history.filter(h => {
+                  const query = historySearchQuery.toLowerCase();
+                  return h.title.toLowerCase().includes(query) || h.date.toLowerCase().includes(query);
+                });
+                
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', margin: 'auto 0', padding: '2rem 0', color: 'var(--text-muted)' }}>
+                      <p>🔍 没有找到匹配的做题记录</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="history-list">
+                    {filtered.map((h) => {
+                      const isExam = h.type === 'exam';
+                      const badgeClass = isExam 
+                        ? (h.score >= 80 ? 'history-score-success' : (h.score >= 60 ? 'history-score-warning' : 'history-score-error'))
+                        : (h.accuracy >= 80 ? 'history-score-success' : (h.accuracy >= 60 ? 'history-score-warning' : 'history-score-error'));
+                      
+                      return (
+                        <div key={h.id} className="history-item">
+                          <div className="history-info">
+                            <span className="history-type">
+                              {isExam ? '📝 ' : '📖 '} {h.title}
+                            </span>
+                            <span className="history-date">{h.date}</span>
                           </div>
-                          {h.timeUsed !== undefined && (
-                            <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.1rem' }}>
-                              ⏱️ 用时: {formatTime(h.timeUsed)}
+                          <div className={`history-score-badge ${badgeClass}`}>
+                            {isExam ? `${h.score} 分` : `正确率 ${h.accuracy}%`}
+                            <div style={{ fontSize: '0.7rem', opacity: 0.8, marginTop: '0.2rem' }}>
+                              {isExam ? `错 ${h.wrong} / 答 ${h.total}` : `练习数 ${h.total}`}
                             </div>
-                          )}
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', marginTop: '0.5rem', width: '100%' }}
-                            onClick={() => {
-                              setCurrentReport(h);
-                              setView('report-detail');
-                            }}
-                          >
-                            查看报告
-                          </button>
+                            {h.timeUsed !== undefined && (
+                              <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.1rem' }}>
+                                ⏱️ 用时: {formatTime(h.timeUsed)}
+                              </div>
+                            )}
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', marginTop: '0.5rem', width: '100%' }}
+                              onClick={() => {
+                                setCurrentReport(h);
+                                setReviewIdx(0); // Reset review index on clicking report
+                                setView('report-detail');
+                              }}
+                            >
+                              查看报告
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
