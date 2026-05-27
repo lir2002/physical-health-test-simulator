@@ -534,10 +534,11 @@ export default function App() {
     // Each question is 4 points, total 100 points
     const score = correctCount * 4;
 
+    const examCount = history.filter(h => h.type === 'exam').length;
     const report = {
       id: 'report-' + Date.now(),
       type: 'exam',
-      title: examInclude2026 ? "2025+2026 混合全真模拟考" : "2025 全真模拟考",
+      title: `第 ${examCount + 1} 次模拟考报告 (${examInclude2026 ? "2025+2026 混合" : "2025 全真"})`,
       date: new Date().toLocaleString(),
       total: examQuestions.length,
       correct: correctCount,
