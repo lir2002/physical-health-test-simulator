@@ -1,0 +1,11 @@
+{
+  "appId": "com.physicalhealth.testsim",
+  "appName": "体育理论考试",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
