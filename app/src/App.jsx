@@ -249,6 +249,56 @@ export default function App() {
     setVoiceEnabled(enabled);
   };
 
+  const playStudyFeedbackSound = (correct) => {
+    if (typeof window === 'undefined') return;
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    try {
+      const ctx = feedbackAudioContextRef.current || new AudioContextClass();
+      feedbackAudioContextRef.current = ctx;
+
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+
+      const playTone = ({ frequency, start, duration, type = 'sine', peak = 0.06 }) => {
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const startAt = ctx.currentTime + start;
+        const endAt = startAt + duration;
+
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(frequency, startAt);
+        gain.gain.setValueAtTime(0.0001, startAt);
+        gain.gain.exponentialRampToValueAtTime(peak, startAt + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
+
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start(startAt);
+        oscillator.stop(endAt + 0.02);
+      };
+
+      if (correct) {
+        [
+          { frequency: 523.25, start: 0, duration: 0.11 },
+          { frequency: 659.25, start: 0.08, duration: 0.12 },
+          { frequency: 783.99, start: 0.17, duration: 0.16, peak: 0.05 },
+        ].forEach(playTone);
+      } else {
+        [
+          { frequency: 440, start: 0, duration: 0.11, type: 'square', peak: 0.075 },
+          { frequency: 349.23, start: 0.1, duration: 0.13, type: 'triangle', peak: 0.07 },
+          { frequency: 261.63, start: 0.22, duration: 0.18, type: 'triangle', peak: 0.06 },
+        ].forEach(playTone);
+      }
+    } catch (e) {
+      console.warn('Study feedback sound failed', e);
+    }
+  };
+
   useEffect(() => {
     writeStorageValue('voice_enabled', voiceEnabled);
     if (!voiceEnabled) {
@@ -323,6 +373,7 @@ export default function App() {
   const [studyIsCorrect, setStudyIsCorrect] = useState(false);
   const [studyHistory, setStudyHistory] = useState([]); // Array of record
   const autoAdvanceTimer = useRef(null);
+  const feedbackAudioContextRef = useRef(null);
 
   const [studySecondsUsed, setStudySecondsUsed] = useState(0);
   const studyTimerRef = useRef(null);
@@ -470,6 +521,7 @@ export default function App() {
     };
 
     setStudyHistory(prev => [...prev, record]);
+    playStudyFeedbackSound(correct);
 
     if (correct) {
       // Auto advance in 3 seconds
@@ -477,8 +529,8 @@ export default function App() {
         nextStudyQuestion();
       }, 3000);
     } else {
-      // Speak explanation immediately
-      speakText(q.explanation);
+      // Let the wrong-answer cue finish before any explanation readout starts.
+      setTimeout(() => speakText(q.explanation), 450);
     }
   };
 
