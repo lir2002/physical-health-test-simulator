@@ -1,0 +1,126 @@
+/**app.wxss**/
+page {
+  background-color: #0b0f19;
+  color: #f3f4f6;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 28rpx;
+  line-height: 1.5;
+  box-sizing: border-box;
+  --bg-primary: #0b0f19;
+  --bg-secondary: rgba(17, 25, 40, 0.65);
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.15);
+  
+  --color-primary: #6366f1;
+  --color-primary-glow: rgba(99, 102, 241, 0.15);
+  --color-secondary: #a855f7;
+  --color-secondary-glow: rgba(168, 85, 247, 0.15);
+  --color-accent: #f43f5e;
+  
+  --color-success: #10b981;
+  --color-success-bg: rgba(16, 185, 129, 0.15);
+  --color-error: #ef4444;
+  --color-error-bg: rgba(239, 68, 68, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-bg: rgba(245, 158, 11, 0.15);
+  
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-bright: #ffffff;
+  
+  --radius-sm: 8rpx;
+  --radius-md: 16rpx;
+  --radius-lg: 24rpx;
+  --radius-xl: 32rpx;
+
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.1) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(244, 63, 94, 0.03) 0px, transparent 50%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+view, text, scroll-view, input, button {
+  box-sizing: border-box;
+}
+
+.container {
+  min-height: 100vh;
+  padding: 30rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: var(--bg-secondary);
+  border: 1rpx solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 30rpx;
+  margin-bottom: 30rpx;
+  backdrop-filter: blur(16rpx);
+  -webkit-backdrop-filter: blur(16rpx);
+}
+
+/* Common buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 28rpx;
+  padding: 20rpx 40rpx;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  border: none;
+  background: none;
+  width: auto !important; /* Override WeChat's default 184px button width */
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary) 0%, #4f46e5 100%);
+  color: #ffffff;
+  border: 1rpx solid var(--color-primary);
+  box-shadow: 0 8rpx 28rpx rgba(99, 102, 241, 0.4);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  border: 1rpx solid var(--border-color);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-error);
+  border: 1rpx solid var(--color-error);
+}
+
+/* Toast Message */
+.toast-message {
+  position: fixed;
+  bottom: 80rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(11, 12, 16, 0.95);
+  color: #fff;
+  border: 1rpx solid var(--color-primary);
+  padding: 20rpx 40rpx;
+  border-radius: 40rpx;
+  font-size: 26rpx;
+  text-align: center;
+  z-index: 10000;
+  box-shadow: 0 10rpx 30rpx rgba(0,0,0,0.5);
+  max-width: 80%;
+  pointer-events: none;
+  animation: toastFadeIn 0.3s ease-out;
+}
+
+@keyframes toastFadeIn {
+  from { opacity: 0; transform: translate(-50%, 20rpx); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}

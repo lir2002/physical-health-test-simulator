@@ -1,0 +1,579 @@
+<!--pages/index/index.wxml-->
+<view class="container">
+  <!-- System Back Button Interceptor -->
+  <page-container 
+    show="{{showPageContainer}}" 
+    duration="{{0}}" 
+    overlay="{{false}}" 
+    position="center"
+    custom-style="display: none; width: 0; height: 0;"
+    bind:leave="onPageContainerLeave">
+  </page-container>
+
+  <!-- Toast Message -->
+  <view class="toast-message" wx:if="{{toastMsg}}">{{toastMsg}}</view>
+
+  <!-- ========================================================
+      HEADER
+      ======================================================== -->
+  <view class="app-header">
+    <view class="logo-area" bindtap="handleHeaderHomeClick">
+      <view class="logo-icon">PH</view>
+      <view class="logo-text">
+        <view class="brand-main">2026 深圳市体育与健康科目测试</view>
+        <view class="brand-sub title-gradient">模拟训练系统</view>
+      </view>
+    </view>
+    
+    <view class="nav-actions">
+      <!-- Voice toggle in corner -->
+      <view class="voice-switcher-container">
+        <text class="voice-label">🔊 错题解读朗读</text>
+        <switch bindchange="onVoiceToggleChange" checked="{{voiceEnabled}}" color="#6366f1" class="voice-switch" />
+      </view>
+
+      <button class="btn btn-secondary header-btn" wx:if="{{view !== 'dashboard'}}" bindtap="handleHeaderHomeClick">
+        返回主页
+      </button>
+    </view>
+  </view>
+
+  <!-- ========================================================
+      DASHBOARD VIEW
+      ======================================================== -->
+  <view class="view-content" wx:if="{{view === 'dashboard'}}">
+    <!-- Active Study Banners -->
+    <view class="saved-session-banner-2025 glass-panel" wx:if="{{savedStudy2025}}">
+      <view class="banner-inner-flex">
+        <view class="banner-text-content">
+          <view class="banner-title">📝 发现未完成的 2025 年学习进度</view>
+          <view class="banner-desc">
+            题库: 2025年真题突破 | 进度: 第 <text class="highlight">{{savedStudy2025.index + 1}}</text> 题 / 共 <text class="highlight">{{savedStudy2025.questions.length}}</text> 题 | 已答: <text class="highlight">{{savedStudy2025.history.length}}</text> 题
+            <block wx:if="{{savedStudy2025.history.length > 0}}"> | 当前正确率: <text class="highlight">{{savedStudy2025_correctness}}%</text></block>
+            <view class="banner-desc-line2">
+              已学用时: <text class="banner-highlight-time">{{formattedSavedTime2025}}</text> | 上次退出时间: <text class="banner-highlight-time">{{savedStudy2025_exitTime}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="banner-actions">
+          <button class="btn btn-primary btn-sm" bindtap="resumeStudy" data-year="2025">继续学习</button>
+          <button class="btn btn-secondary btn-sm" bindtap="confirmDropStudy" data-year="2025">放弃进度</button>
+        </view>
+      </view>
+    </view>
+
+    <view class="saved-session-banner-2026 glass-panel" wx:if="{{savedStudy2026}}">
+      <view class="banner-inner-flex">
+        <view class="banner-text-content">
+          <view class="banner-title">🎯 发现未完成的 2026 年预测题学习进度</view>
+          <view class="banner-desc">
+            题库: 2026预测考题 | 进度: 第 <text class="highlight">{{savedStudy2026.index + 1}}</text> 题 / 共 <text class="highlight">{{savedStudy2026.questions.length}}</text> 题 | 已答: <text class="highlight">{{savedStudy2026.history.length}}</text> 题
+            <block wx:if="{{savedStudy2026.history.length > 0}}"> | 当前正确率: <text class="highlight">{{savedStudy2026_correctness}}%</text></block>
+            <view class="banner-desc-line2">
+              已学用时: <text class="banner-highlight-time">{{formattedSavedTime2026}}</text> | 上次退出时间: <text class="banner-highlight-time">{{savedStudy2026_exitTime}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="banner-actions">
+          <button class="btn btn-primary btn-sm" bindtap="resumeStudy" data-year="2026">继续学习</button>
+          <button class="btn btn-secondary btn-sm" bindtap="confirmDropStudy" data-year="2026">放弃进度</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- Main Navigation / Mode Selectors -->
+    <view class="mode-grid">
+      <view class="mode-card glass-panel" bindtap="switchView" data-view="study-setup">
+        <view class="mode-icon study-icon">📖</view>
+        <view class="mode-name">智能学习模式</view>
+        <view class="mode-desc">答错自动展示解析，多维度巩固知识点，支持随时保存进度</view>
+      </view>
+      <view class="mode-card glass-panel" bindtap="switchView" data-view="exam-setup">
+        <view class="mode-icon exam-icon">📝</view>
+        <view class="mode-name">模拟考试模式</view>
+        <view class="mode-desc">仿真30分钟倒计时，随机抽取25题，自动核准对错并打分</view>
+      </view>
+    </view>
+
+    <!-- Quick Stats Grid -->
+    <view class="stats-card glass-panel">
+      <view class="section-title">📊 练习数据看板</view>
+      <view class="stats-grid">
+        <view class="stat-item">
+          <view class="stat-val">{{stat_totalStudyTime}}</view>
+          <view class="stat-lbl">累计学习用时</view>
+        </view>
+        <view class="stat-item">
+          <view class="stat-val">{{stat_studyAccuracy}}%</view>
+          <view class="stat-lbl">平均学习正确率</view>
+        </view>
+        <view class="stat-item">
+          <view class="stat-val">{{stat_totalStudySessions}}</view>
+          <view class="stat-lbl">累计学习场次</view>
+        </view>
+        <view class="stat-item">
+          <view class="stat-val">{{stat_totalExamSessions}}</view>
+          <view class="stat-lbl">累计模拟考试</view>
+        </view>
+        <view class="stat-item">
+          <view class="stat-val">{{stat_avgExamScore}}分</view>
+          <view class="stat-lbl">模拟考平均分</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Trend Charts -->
+    <view class="trend-card glass-panel">
+      <view class="trend-header">
+        <view class="section-title">📈 成绩趋势分析</view>
+        <view class="trend-tabs">
+          <view class="trend-tab {{chartTab === 'study' ? 'active' : ''}}" bindtap="selectChartTab" data-tab="study">智能学习</view>
+          <view class="trend-tab {{chartTab === 'exam' ? 'active' : ''}}" bindtap="selectChartTab" data-tab="exam">模拟考试</view>
+        </view>
+      </view>
+      <view class="canvas-container">
+        <canvas type="2d" id="trendCanvas" class="trend-canvas"></canvas>
+      </view>
+    </view>
+
+    <!-- History Card -->
+    <view class="history-card glass-panel">
+      <view class="history-header">
+        <view class="section-title">🕒 历史做题记录</view>
+        <input class="search-input" placeholder="🔍 搜索历史报告..." value="{{searchQuery}}" bindinput="onSearchInput" />
+      </view>
+
+      <view class="history-list">
+        <!-- Render Items -->
+        <block wx:if="{{filteredHistory.length > 0}}">
+          <view class="history-item" wx:for="{{filteredHistory}}" wx:key="id" bindtap="viewReport" data-id="{{item.id}}">
+            <view class="item-meta">
+              <view class="item-title">{{item.title}}</view>
+              <view class="item-date">📅 {{item.date}}</view>
+            </view>
+            <view class="item-stats">
+              <block wx:if="{{item.type === 'study'}}">
+                <view class="badge badge-study">学习</view>
+                <view class="stat-info">正确率: {{item.accuracy}}% | 答题: {{item.total}} | ⏱️ {{item.formattedTime}}</view>
+              </block>
+              <block wx:else>
+                <view class="badge badge-exam">考试</view>
+                <view class="stat-info font-score">得分: {{item.score}}分 | 正确: {{item.correct}}/25 | ⏱️ {{item.formattedTime}}</view>
+              </block>
+            </view>
+            <view class="item-delete" catchtap="deleteReport" data-id="{{item.id}}">🗑️</view>
+          </view>
+        </block>
+        <!-- Empty State -->
+        <view class="empty-state" wx:else>
+          <view class="empty-icon">📁</view>
+          <view class="empty-text">{{searchQuery ? '没有找到匹配的做题记录' : '暂无历史记录，快去练习吧！'}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ========================================================
+      STUDY SETUP VIEW
+      ======================================================== -->
+  <view class="view-content center-view" wx:if="{{view === 'study-setup'}}">
+    <view class="setup-box glass-panel">
+      <view class="setup-icon">📖</view>
+      <view class="setup-title">智能学习配置</view>
+      <view class="setup-desc">系统将载入完整真题库进行练习，自动记忆错题，做题时实时展示答题解析并统计正确率。</view>
+      
+      <view class="year-selector">
+        <view class="year-label">选择考纲题库：</view>
+        <view class="year-options">
+          <view class="year-opt {{studyPoolYear === 2025 ? 'active' : ''}}" bindtap="selectStudyYear" data-year="2025">2025年真题</view>
+          <view class="year-opt {{studyPoolYear === 2026 ? 'active' : ''}}" bindtap="selectStudyYear" data-year="2026">2026年预测</view>
+        </view>
+      </view>
+      
+      <view class="setup-buttons">
+        <button class="btn btn-primary" bindtap="startNewStudy">开始学习</button>
+        <button class="btn btn-secondary" bindtap="switchView" data-view="dashboard">返回首页</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- ========================================================
+      STUDY MODE VIEW
+      ======================================================== -->
+  <view class="view-content" wx:if="{{view === 'study' && studyQuestions.length > 0}}">
+    <view class="glass-panel">
+      <view class="question-container">
+        <!-- Header info -->
+        <view class="question-meta">
+          <view class="meta-left">
+            <text class="meta-pill meta-pill-accent">📖 {{studyPoolYear === 2025 ? '2025年真题库' : '2026预测考题'}}</text>
+            <text class="meta-pill">{{studyQuestions[studyIndex].type === 'tf' ? '判断题' : '单项选择题'}}</text>
+          </view>
+          
+          <view class="meta-right">
+            <text class="meta-pill accuracy-pill" wx:if="{{studyHistory.length > 0}}">🎯 当前正确率: {{studyCorrectnessRate}}%</text>
+            <text class="meta-pill">⏱️ 已用时: {{formattedStudyTime}}</text>
+            <text class="meta-pill">进度: {{studyIndex + 1}} / {{studyQuestions.length}}</text>
+          </view>
+        </view>
+
+        <!-- Progress bar -->
+        <view class="progress-bar-bg">
+          <view class="progress-bar-fill" style="width: {{((studyIndex + 1) / studyQuestions.length) * 100}}%"></view>
+        </view>
+
+        <!-- Question stem -->
+        <view class="question-stem">{{studyQuestions[studyIndex].stem}}</view>
+
+        <!-- Options -->
+        <view class="options-list">
+          <!-- True/False Options -->
+          <block wx:if="{{studyQuestions[studyIndex].type === 'tf'}}">
+            <view 
+              class="option-button {{studyAnswered && studyQuestions[studyIndex].answer === 'T' ? 'correct' : ''}} {{studyAnswered && !studyIsCorrect && studySelectedAnswer === 'T' ? 'incorrect' : ''}}" 
+              bindtap="handleStudyAnswer" 
+              data-option="T"
+            >
+              <view class="option-prefix">√</view>
+              <view style="align-self: center;">正确 (对)</view>
+            </view>
+            <view 
+              class="option-button {{studyAnswered && studyQuestions[studyIndex].answer === 'F' ? 'correct' : ''}} {{studyAnswered && !studyIsCorrect && studySelectedAnswer === 'F' ? 'incorrect' : ''}}" 
+              bindtap="handleStudyAnswer" 
+              data-option="F"
+            >
+              <view class="option-prefix">×</view>
+              <view style="align-self: center;">错误 (错)</view>
+            </view>
+          </block>
+
+          <!-- Multiple Choice Options -->
+          <block wx:else>
+            <view 
+              wx:for="{{studyQuestions[studyIndex].options}}" 
+              wx:key="*this" 
+              class="option-button {{studyAnswered && studyQuestions[studyIndex].answer === option_letters[index] ? 'correct' : ''}} {{studyAnswered && !studyIsCorrect && studySelectedAnswer === option_letters[index] ? 'incorrect' : ''}}"
+              bindtap="handleStudyAnswer"
+              data-option="{{option_letters[index]}}"
+            >
+              <view class="option-prefix">{{option_letters[index]}}</view>
+              <view style="align-self: center;">{{item}}</view>
+            </view>
+          </block>
+        </view>
+
+        <!-- Immediate explanation if answered and wrong -->
+        <view class="explanation-panel" wx:if="{{studyAnswered && !studyIsCorrect}}">
+          <view class="explanation-title-row">
+            <view class="explanation-title">💡 错题解析:</view>
+            <button 
+              class="btn btn-secondary replay-voice-btn" 
+              wx:if="{{voiceEnabled}}"
+              bindtap="replayStudyVoice"
+            >
+              🔊 重新播放朗读
+            </button>
+          </view>
+          <view class="explanation-text">{{studyQuestions[studyIndex].explanation}}</view>
+        </view>
+
+        <!-- Navigation buttons -->
+        <view class="section-nav-footer">
+          <button class="btn btn-secondary" bindtap="prevStudyQuestion" disabled="{{studyIndex === 0}}">上一题</button>
+          
+          <view class="flex-row-gap">
+            <button class="btn btn-secondary" bindtap="saveAndExitStudy">💾 保存进度并退出</button>
+            <button class="btn btn-secondary danger-btn" bindtap="handleHeaderHomeClick">结束学习并退出</button>
+          </view>
+
+          <button class="btn btn-primary" bindtap="nextStudyQuestion" disabled="{{!studyAnswered && studyIndex === studyQuestions.length - 1}}">
+            {{studyIndex === studyQuestions.length - 1 ? '完成学习' : '下一题'}}
+          </button>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ========================================================
+      EXAM SETUP VIEW
+      ======================================================== -->
+  <view class="view-content center-view" wx:if="{{view === 'exam-setup'}}">
+    <view class="setup-box glass-panel">
+      <view class="setup-icon">📝</view>
+      <view class="setup-title">模拟考试说明</view>
+      <view class="rules-card">
+        <view class="rule-item">1. **满分 100 分**：共 25 道题目（10 道判断题，15 道单选题），每题 4 分。</view>
+        <view class="rule-item">2. **考试限时 30 分钟**：倒计时归零时系统将强制自动交卷。</view>
+        <view class="rule-item">3. **成绩归档**：交卷后将生成详尽的答题对错分析报告，并记入历史趋势。</view>
+        <view class="rule-item">4. **不支持暂存**：考试中途退出将丢弃答卷。</view>
+      </view>
+
+      <view class="year-selector">
+        <view class="year-label">选择考试题库：</view>
+        <view class="year-options">
+          <view class="year-opt {{examPoolYear === 2025 ? 'active' : ''}}" bindtap="selectExamYear" data-year="2025">2025年考题</view>
+          <view class="year-opt {{examPoolYear === 2026 ? 'active' : ''}}" bindtap="selectExamYear" data-year="2026">2026年预测</view>
+        </view>
+      </view>
+
+      <view class="setup-buttons">
+        <button class="btn btn-primary" bindtap="startExam">开始测试</button>
+        <button class="btn btn-secondary" bindtap="switchView" data-view="dashboard">返回首页</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- ========================================================
+      EXAM MODE VIEW
+      ======================================================== -->
+  <view class="view-content" wx:if="{{view === 'exam' && examQuestions.length > 0}}">
+    <view class="glass-panel">
+      <view class="question-container">
+        <!-- Exam Header -->
+        <view class="question-meta" style="border-bottom: 1rpx solid var(--border-color); padding-bottom: 20rpx; margin-bottom: 30rpx;">
+          <view class="meta-left">
+            <text class="meta-pill" style="background: rgba(239, 68, 68, 0.15); color: #fca5a5; border-color: rgba(239, 68, 68, 0.2);">📝 模拟考场</text>
+            <text class="meta-pill">当前: {{examIndex + 1}} / {{examQuestions.length}} ({{examQuestions[examIndex].type === 'tf' ? '判断题' : '单项选择题'}})</text>
+          </view>
+          
+          <view class="timer-container {{examTimeRemaining > 300 ? 'timer-normal' : (examTimeRemaining > 60 ? 'timer-warning' : 'timer-danger')}}">
+            ⏱️ 倒计时: {{formattedExamTime}}
+          </view>
+        </view>
+
+        <!-- Progress bar -->
+        <view class="progress-bar-bg">
+          <view class="progress-bar-fill" style="width: {{(examAnsweredCount / examQuestions.length) * 100}}%"></view>
+        </view>
+
+        <!-- Question stem -->
+        <view class="question-stem">{{examQuestions[examIndex].stem}}</view>
+
+        <!-- Options -->
+        <view class="options-list">
+          <!-- True/False Options -->
+          <block wx:if="{{examQuestions[examIndex].type === 'tf'}}">
+            <view 
+              class="option-button {{examAnswers[examQuestions[examIndex].id] === 'T' ? 'selected' : ''}}" 
+              bindtap="handleExamAnswer" 
+              data-option="T"
+            >
+              <view class="option-prefix">√</view>
+              <view style="align-self: center;">正确 (对)</view>
+            </view>
+            <view 
+              class="option-button {{examAnswers[examQuestions[examIndex].id] === 'F' ? 'selected' : ''}}" 
+              bindtap="handleExamAnswer" 
+              data-option="F"
+            >
+              <view class="option-prefix">×</view>
+              <view style="align-self: center;">错误 (错)</view>
+            </view>
+          </block>
+
+          <!-- Multiple Choice Options -->
+          <block wx:else>
+            <view 
+              wx:for="{{examQuestions[examIndex].options}}" 
+              wx:key="*this" 
+              class="option-button {{examAnswers[examQuestions[examIndex].id] === option_letters[index] ? 'selected' : ''}}"
+              bindtap="handleExamAnswer"
+              data-option="{{option_letters[index]}}"
+            >
+              <view class="option-prefix">{{option_letters[index]}}</view>
+              <view style="align-self: center;">{{item}}</view>
+            </view>
+          </block>
+        </view>
+
+        <!-- Exam Grid Jumper / Reviewer (答题卡分布) -->
+        <view style="margin: 40rpx 0; padding: 30rpx; background: rgba(255, 255, 255, 0.01); border: 1rpx solid var(--border-color); border-radius: var(--radius-md);">
+          <view style="font-size: 24rpx; color: var(--text-muted); margin-bottom: 20rpx;">答题卡分布 (点击可快速切换题目)：</view>
+          <view class="exam-review-grid" style="margin: 0;">
+            <view 
+              wx:for="{{examQuestions}}" 
+              wx:key="id" 
+              class="review-cell {{examAnswers[item.id] ? 'correct' : 'skipped'}} {{examIndex === index ? 'active' : ''}}"
+              bindtap="selectExamQuestion"
+              data-idx="{{index}}"
+              style="{{examAnswers[item.id] ? 'background: rgba(99, 102, 241, 0.2); border-color: var(--color-primary); color: white;' : ''}}"
+            >
+              {{index + 1}}
+            </view>
+          </view>
+        </view>
+
+        <!-- Exam Navigation Footer -->
+        <view class="section-nav-footer">
+          <button class="btn btn-secondary" bindtap="prevExamQuestion" disabled="{{examIndex === 0}}">上一题</button>
+          <button class="btn btn-secondary danger-btn" bindtap="submitExam">提前交卷</button>
+          <button class="btn btn-primary" bindtap="nextExamQuestion" disabled="{{examIndex === examQuestions.length - 1}}">下一题</button>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ========================================================
+      REPORT DETAIL VIEW
+      ======================================================== -->
+  <view class="view-content" wx:if="{{view === 'report-detail' && currentReport}}">
+    <view class="glass-panel">
+      <!-- Title -->
+      <view style="font-size: 34rpx; font-weight: 800; display: block; text-align: center; margin-bottom: 12rpx; color: var(--text-bright);">
+        🎉 {{currentReport.title}}
+      </view>
+      <view style="text-align: center; color: var(--text-muted); font-size: 24rpx; margin-bottom: 40rpx;">
+        提交时间: {{currentReport.date}}
+      </view>
+
+      <!-- Stats overview -->
+      <view class="stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 40rpx; gap: 20rpx;">
+        <view class="stat-item" wx:if="{{currentReport.score !== undefined}}">
+          <view class="stat-val {{currentReport.score >= 90 ? 'color-success' : (currentReport.score >= 60 ? 'color-warning' : 'color-error')}}" style="font-size: 40rpx;">
+            {{currentReport.score}} <text style="font-size: 20rpx; font-weight: 500;">分</text>
+          </view>
+          <view class="stat-lbl">考试得分 (满分100)</view>
+        </view>
+
+        <view class="stat-item">
+          <view class="stat-val color-primary" style="font-size: 40rpx;">{{currentReport.accuracy}}%</view>
+          <view class="stat-lbl">答题正确率</view>
+        </view>
+
+        <view class="stat-item">
+          <view class="stat-val color-success" style="font-size: 40rpx;">{{currentReport.correct}}</view>
+          <view class="stat-lbl">正确题数</view>
+        </view>
+
+        <view class="stat-item">
+          <view class="stat-val color-error" style="font-size: 40rpx;">{{currentReport.wrong}}</view>
+          <view class="stat-lbl">错误题数</view>
+        </view>
+
+        <view class="stat-item" wx:if="{{currentReport.timeUsed !== undefined}}">
+          <view class="stat-val color-secondary" style="font-size: 40rpx;">{{currentReport.formattedTime}}</view>
+          <view class="stat-lbl">本次练习用时</view>
+        </view>
+      </view>
+
+      <!-- Grid display of Correct / Wrong questions -->
+      <view style="background: rgba(255,255,255,0.01); border: 1rpx solid var(--border-color); border-radius: var(--radius-md); padding: 30rpx; margin-bottom: 40rpx;">
+        <view style="font-size: 26rpx; margin-bottom: 20rpx; color: var(--text-bright); font-weight: 700;">
+          🎯 题目对错速览表 (点击题号查看详细解析)：
+        </view>
+        
+        <view class="exam-review-grid">
+          <view
+            wx:for="{{currentReport.details}}"
+            wx:key="id"
+            class="review-cell {{item.correct ? 'correct' : 'incorrect'}} {{reviewIdx === index ? 'active' : ''}}"
+            bindtap="selectReviewQuestion"
+            data-idx="{{index}}"
+          >
+            {{index + 1}}
+          </view>
+        </view>
+      </view>
+
+      <!-- Selected question review panel -->
+      <view class="question-container" wx:if="{{currentReport.details.length > 0}}">
+        <view style="background: rgba(255, 255, 255, 0.02); border: 1rpx solid var(--border-color); border-radius: var(--radius-md); padding: 40rpx; margin-bottom: 40rpx;">
+          <view style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30rpx;">
+            <text class="meta-pill meta-pill-accent">
+              题号: {{reviewIdx + 1}} ({{currentReport.details[reviewIdx].type === 'tf' ? '判断题' : '选择题'}})
+            </text>
+            
+            <text class="meta-pill {{currentReport.details[reviewIdx].correct ? 'bg-success font-success' : 'bg-error font-error'}}" style="border: none;">
+              {{currentReport.details[reviewIdx].correct ? '✓ 回答正确' : '✗ 回答错误'}}
+            </text>
+          </view>
+
+          <view class="question-stem" style="font-size: 30rpx;">
+            {{currentReport.details[reviewIdx].stem}}
+          </view>
+
+          <!-- Review Choices -->
+          <view class="options-list">
+            <!-- TF Choices -->
+            <block wx:if="{{currentReport.details[reviewIdx].type === 'tf'}}">
+              <view class="option-button {{currentReport.details[reviewIdx].correctAnswer === 'T' ? 'correct' : ''}} {{currentReport.details[reviewIdx].userAnswer === 'T' && !currentReport.details[reviewIdx].correct ? 'incorrect' : ''}} disabled">
+                <view class="option-prefix">√</view>
+                <view style="align-self: center;">正确 (对)</view>
+              </view>
+              <view class="option-button {{currentReport.details[reviewIdx].correctAnswer === 'F' ? 'correct' : ''}} {{currentReport.details[reviewIdx].userAnswer === 'F' && !currentReport.details[reviewIdx].correct ? 'incorrect' : ''}} disabled">
+                <view class="option-prefix">×</view>
+                <view style="align-self: center;">错误 (错)</view>
+              </view>
+            </block>
+
+            <!-- MC Choices -->
+            <block wx:else>
+              <view 
+                wx:for="{{currentReport.details[reviewIdx].options}}" 
+                wx:key="*this"
+                class="option-button {{currentReport.details[reviewIdx].correctAnswer === option_letters[index] ? 'correct' : ''}} {{currentReport.details[reviewIdx].userAnswer === option_letters[index] && !currentReport.details[reviewIdx].correct ? 'incorrect' : ''}} disabled"
+              >
+                <view class="option-prefix">{{option_letters[index]}}</view>
+                <view style="align-self: center;">{{item}}</view>
+              </view>
+            </block>
+          </view>
+
+          <!-- Explanation Panel -->
+          <view class="explanation-panel">
+            <view class="explanation-title-row">
+              <view class="explanation-title">💡 科学解读:</view>
+              <button 
+                class="btn btn-secondary replay-voice-btn" 
+                wx:if="{{voiceEnabled}}"
+                bindtap="replayReportVoice"
+              >
+                🔊 重新播放朗读
+              </button>
+            </view>
+            <view class="explanation-text">{{currentReport.details[reviewIdx].explanation}}</view>
+          </view>
+        </view>
+      </view>
+
+      <!-- Return Button -->
+      <view class="report-footer">
+        <button class="btn btn-primary" bindtap="switchView" data-view="dashboard">返回仪表盘主页</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- ========================================================
+      MODAL DIALOGS
+      ======================================================== -->
+  <!-- Drop Confirmation Modal -->
+  <view class="modal-overlay" wx:if="{{showDropConfirmModal}}">
+    <view class="modal-box glass-panel">
+      <view class="modal-icon">⚠️</view>
+      <view class="modal-title">放弃学习进度</view>
+      <view class="modal-content">确定要放弃当前真题题库的学习进度吗？您可以选择将已回答的题目归档成历史报告，或者直接清空进度。</view>
+      <view class="modal-buttons">
+        <button class="btn btn-primary btn-sm" bindtap="executeDrop" data-archive="true">📊 归档报告并清除</button>
+        <button class="btn btn-danger btn-sm" bindtap="executeDrop" data-archive="false">❌ 直接清除</button>
+        <button class="btn btn-secondary btn-sm" bindtap="cancelDrop">取消</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- Exit Study Confirmation Modal -->
+  <view class="modal-overlay" wx:if="{{showExitStudyModal}}">
+    <view class="modal-box glass-panel">
+      <view class="modal-icon">💾</view>
+      <view class="modal-title">退出学习模式</view>
+      <view class="modal-content">
+        您当前已回答 <text class="highlight">{{studyHistory.length}}</text> 道题目，其中正确 <text class="highlight">{{studyHistory_correctCount}}</text> 道。请选择您想要进行的操作：
+      </view>
+      <view class="modal-buttons vertical-buttons">
+        <button class="btn btn-primary" wx:if="{{exitTrigger === 'return-home'}}" bindtap="saveAndExitStudy">💾 暂存当前进度并返回主页</button>
+        <button class="btn btn-secondary" bindtap="generateReportAndExitStudy">📊 生成答题报告并退出</button>
+        <button class="btn btn-danger" bindtap="discardAndExitStudy">❌ 不保存直接退出</button>
+        <button class="btn btn-secondary" bindtap="resumeStudyTimer">取消</button>
+      </view>
+    </view>
+  </view>
+</view>
