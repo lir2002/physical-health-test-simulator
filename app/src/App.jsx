@@ -230,7 +230,7 @@ export default function App() {
           return;
         }
 
-        NativeSpeech.speak({ text, rate: 1.0 }).catch((e) => {
+        NativeSpeech.speak({ text, rate: 1.25 }).catch((e) => {
           console.error('Native speech failed', e);
           setNativeSpeechAvailable(false);
           setToastMsg('文字转语音不可用，请检查系统 TTS 引擎设置。');
@@ -250,7 +250,7 @@ export default function App() {
         cancelWebSpeech();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'zh-CN';
-        utterance.rate = 1.0;
+        utterance.rate = 1.25;
         if (selectedVoice) {
           utterance.voice = selectedVoice;
         }

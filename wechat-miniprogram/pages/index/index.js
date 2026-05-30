@@ -82,12 +82,12 @@ Page({
 
   onUnload: function () {
     this.clearAllTimers();
-    this.cancelSpeech();
+    this.cancelSpeech(true);
   },
 
   onHide: function () {
     this.clearAllTimers();
-    this.cancelSpeech();
+    this.cancelSpeech(false);
   },
 
   onShow: function() {
@@ -529,7 +529,7 @@ Page({
         this.nextStudyQuestion();
       }, 3000);
     } else {
-      setTimeout(() => {
+      this.playVoiceTimeout = setTimeout(() => {
         this.playVoice(q.explanation);
       }, 450);
     }
@@ -1250,36 +1250,37 @@ Page({
     return finalSegments;
   },
 
+  getAudioContext: function() {
+    if (!this.audioContext) {
+      console.log("Creating new InnerAudioContext");
+      this.audioContext = wx.createInnerAudioContext();
+    }
+    return this.audioContext;
+  },
+
   playQueueNext: function() {
     if (!this.data.voiceEnabled) {
-      this.cancelSpeech();
+      this.cancelSpeech(false);
       return;
     }
     
     if (!this.audioQueue || this.audioQueueIndex >= this.audioQueue.length) {
       console.log('Audio queue finished or empty');
-      if (this.audioContext) {
-        try {
-          this.audioContext.destroy();
-        } catch(e) {}
-      }
-      this.audioContext = null;
-      this.audioQueue = null;
-      this.audioQueueIndex = 0;
+      this.cancelSpeech(false);
       return;
     }
     
     const segmentText = this.audioQueue[this.audioQueueIndex];
     console.log(`Playing audio queue index ${this.audioQueueIndex}/${this.audioQueue.length}: "${segmentText}"`);
     
-    if (this.audioContext) {
-      try {
-        this.audioContext.destroy();
-      } catch(e) {
-        console.error('Error destroying audio context', e);
-      }
-      this.audioContext = null;
-    }
+    const audioContext = this.getAudioContext();
+    try {
+      audioContext.stop();
+    } catch(e) {}
+    audioContext.offPlay();
+    audioContext.offEnded();
+    audioContext.offError();
+    try { audioContext.offCanplay(); } catch(e) {}
     
     const encodedText = encodeURIComponent(segmentText);
     const youdaoUrl = `https://dict.youdao.com/dictvoice?audio=${encodedText}&le=zh`;
@@ -1288,15 +1289,10 @@ Page({
     const attemptPlay = (url, isFallback) => {
       console.log(`Downloading audio from: ${url}`);
       
-      const audioContext = wx.createInnerAudioContext();
-      this.audioContext = audioContext;
-      
       if (wx.setInnerAudioOption) {
         wx.setInnerAudioOption({
           obeyMuteSwitch: false,
-          speakerOn: true,
-          success: () => console.log('setInnerAudioOption success'),
-          fail: (err) => console.error('setInnerAudioOption fail', err)
+          speakerOn: true
         });
       }
       
@@ -1307,11 +1303,11 @@ Page({
         isTimedOut = true;
         console.warn(`Download timed out (5s limit) for: ${url}`);
         if (downloadTask) {
-          try {
-            downloadTask.abort();
-          } catch(e) {}
+          try { downloadTask.abort(); } catch(e) {}
         }
-        handleFailure();
+        if (this.audioContext === audioContext) {
+          handleFailure();
+        }
       }, 5000);
       
       downloadTask = wx.downloadFile({
@@ -1320,28 +1316,37 @@ Page({
           if (isTimedOut) return;
           clearTimeout(timeoutId);
           
+          if (this.audioContext !== audioContext) {
+            try {
+              const fs = wx.getFileSystemManager();
+              fs.unlink({ filePath: res.tempFilePath });
+            } catch(e) {}
+            return;
+          }
+          
           if (res.statusCode === 200 && res.tempFilePath) {
             console.log(`Successfully downloaded audio to ${res.tempFilePath}`);
             audioContext.src = res.tempFilePath;
+            audioContext.playbackRate = 1.25;
             
             audioContext.onPlay(() => {
               console.log(`Audio segment ${this.audioQueueIndex} (${isFallback ? 'Baidu' : 'Youdao'}) started successfully`);
+              try {
+                audioContext.playbackRate = 1.25;
+              } catch(e) {}
             });
             
             audioContext.onEnded(() => {
               console.log(`Audio segment ${this.audioQueueIndex} (${isFallback ? 'Baidu' : 'Youdao'}) ended`);
-              // Clean up temp file asynchronously to prevent bloating local storage
               try {
                 const fs = wx.getFileSystemManager();
-                fs.unlink({
-                  filePath: res.tempFilePath,
-                  success: () => console.log(`Cleaned up temp file: ${res.tempFilePath}`),
-                  fail: (err) => console.warn(`Failed to clean up temp file: ${res.tempFilePath}`, err)
-                });
+                fs.unlink({ filePath: res.tempFilePath });
               } catch(e) {}
               
-              this.audioQueueIndex++;
-              this.playQueueNext();
+              if (this.audioContext === audioContext) {
+                this.audioQueueIndex++;
+                this.playQueueNext();
+              }
             });
             
             audioContext.onError((playErr) => {
@@ -1350,10 +1355,15 @@ Page({
                 const fs = wx.getFileSystemManager();
                 fs.unlink({ filePath: res.tempFilePath });
               } catch(e) {}
-              handleFailure();
+              if (this.audioContext === audioContext) {
+                handleFailure();
+              }
             });
             
             audioContext.play();
+            try {
+              audioContext.playbackRate = 1.25;
+            } catch(e) {}
           } else {
             console.warn(`Download returned non-200 status: ${res.statusCode}`);
             handleFailure();
@@ -1363,35 +1373,26 @@ Page({
           if (isTimedOut) return;
           clearTimeout(timeoutId);
           console.warn(`Download failed:`, err);
-          handleFailure();
+          if (this.audioContext === audioContext) {
+            handleFailure();
+          }
         }
       });
       
       const handleFailure = () => {
-        try {
-          audioContext.destroy();
-        } catch(e) {}
         if (this.audioContext === audioContext) {
-          this.audioContext = null;
-        }
-        
-        if (!isFallback) {
-          console.log(`Youdao download/play failed, attempting Baidu fallback...`);
-          attemptPlay(baiduUrl, true);
-        } else {
-          console.error(`All downloads and playbacks failed for segment ${this.audioQueueIndex}`);
-          wx.showToast({
-            title: `播放失败，请在设置中授权“同声传译”插件`,
-            icon: 'none',
-            duration: 3500
-          });
-          this.audioQueueIndex++;
-          this.playQueueNext();
+          if (!isFallback) {
+            console.log(`Youdao download/play failed, attempting Baidu fallback...`);
+            attemptPlay(baiduUrl, true);
+          } else {
+            console.error(`All downloads and playbacks failed for segment ${this.audioQueueIndex}`);
+            this.audioQueueIndex++;
+            this.playQueueNext();
+          }
         }
       };
     };
     
-    // Start with Youdao
     attemptPlay(youdaoUrl, false);
   },
 
@@ -1403,7 +1404,7 @@ Page({
     }
     if (!text) return;
     
-    this.cancelSpeech();
+    this.cancelSpeech(false);
     
     const cleanText = text.replace(/[\\*#_`]/g, '').trim();
     if (!cleanText) return;
@@ -1416,67 +1417,78 @@ Page({
       console.warn("WechatSI plugin is not loaded in app.json:", e);
     }
 
+    if (wx.setInnerAudioOption) {
+      wx.setInnerAudioOption({
+        obeyMuteSwitch: false,
+        speakerOn: true
+      });
+    }
+
+    const audioContext = this.getAudioContext();
+
     if (wechatSI && typeof wechatSI.textToSpeech === 'function') {
       console.log("Attempting text-to-speech using official WechatSI plugin...");
       
-      const audioContext = wx.createInnerAudioContext();
-      this.audioContext = audioContext;
-      
-      if (wx.setInnerAudioOption) {
-        wx.setInnerAudioOption({
-          obeyMuteSwitch: false,
-          speakerOn: true
-        });
-      }
-
       wechatSI.textToSpeech({
         lang: "zh_CN",
         tts: true,
         content: cleanText,
         success: (res) => {
-          console.log("WechatSI TTS synthesis successful:", res.filename);
           if (this.audioContext === audioContext) {
+            console.log("WechatSI TTS synthesis successful:", res.filename);
+            
+            // Clean up any listeners that might be bound
+            audioContext.offPlay();
+            audioContext.offEnded();
+            audioContext.offError();
+            try { audioContext.offCanplay(); } catch(e) {}
+            
             audioContext.src = res.filename;
+            audioContext.playbackRate = 1.25;
             
             audioContext.onPlay(() => {
               console.log("WechatSI playback started successfully");
+              try {
+                audioContext.playbackRate = 1.25;
+              } catch(e) {}
             });
             
             audioContext.onEnded(() => {
               console.log("WechatSI playback ended");
               if (this.audioContext === audioContext) {
-                this.audioContext = null;
+                audioContext.offPlay();
+                audioContext.offEnded();
+                audioContext.offError();
+                try { audioContext.offCanplay(); } catch(e) {}
               }
-              try {
-                audioContext.destroy();
-              } catch(e) {}
             });
             
             audioContext.onError((err) => {
               console.error("WechatSI playback error:", err);
-              try {
-                audioContext.destroy();
-              } catch(e) {}
+              const shouldFallback = (this.audioContext === audioContext);
               if (this.audioContext === audioContext) {
-                this.audioContext = null;
+                audioContext.offPlay();
+                audioContext.offEnded();
+                audioContext.offError();
+                try { audioContext.offCanplay(); } catch(e) {}
               }
-              // Fallback to queue player if playback fails
-              this.fallbackToQueuePlayer(cleanText);
+              if (shouldFallback) {
+                this.fallbackToQueuePlayer(cleanText);
+              }
             });
             
             audioContext.play();
+            try {
+              audioContext.playbackRate = 1.25;
+            } catch(e) {}
           }
         },
         fail: (err) => {
           console.warn("WechatSI TTS synthesis failed:", err);
-          try {
-            audioContext.destroy();
-          } catch(e) {}
-          if (this.audioContext === audioContext) {
-            this.audioContext = null;
+          const shouldFallback = (this.audioContext === audioContext);
+          if (shouldFallback) {
+            this.fallbackToQueuePlayer(cleanText);
           }
-          // Fallback to queue player
-          this.fallbackToQueuePlayer(cleanText);
         }
       });
     } else {
@@ -1544,16 +1556,30 @@ Page({
     }
   },
 
-  cancelSpeech: function() {
-    console.log('cancelSpeech called');
+  cancelSpeech: function(destroy = false) {
+    console.log('cancelSpeech called, destroy:', destroy);
+    if (this.playVoiceTimeout) {
+      clearTimeout(this.playVoiceTimeout);
+      this.playVoiceTimeout = null;
+    }
     this.audioQueue = null;
     this.audioQueueIndex = 0;
+    
     if (this.audioContext) {
       try {
         this.audioContext.stop();
-        this.audioContext.destroy();
-        this.audioContext = null;
-        console.log('Audio context stopped and destroyed successfully');
+        this.audioContext.offPlay();
+        this.audioContext.offEnded();
+        this.audioContext.offError();
+        try { this.audioContext.offCanplay(); } catch(e) {}
+        
+        if (destroy) {
+          this.audioContext.destroy();
+          this.audioContext = null;
+          console.log('Audio context stopped and destroyed successfully');
+        } else {
+          console.log('Audio context stopped and listeners cleared');
+        }
       } catch(e) {
         console.error('Error stopping/destroying audio context', e);
       }
