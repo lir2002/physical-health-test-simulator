@@ -175,10 +175,30 @@ const mc26 = q2026.find(q => q.type === 'mc');
 console.log('\nSample 2026 MC:');
 console.log(JSON.stringify(mc26, null, 2));
 
-// Save to JSON files
+// Save to JSON files (root)
 fs.writeFileSync(path.join(__dirname, 'questions-2025.json'), JSON.stringify(q2025, null, 2));
 fs.writeFileSync(path.join(__dirname, 'questions-2026.json'), JSON.stringify(q2026, null, 2));
-console.log('Saved JSON files!');
+console.log('Saved JSON files to root!');
+
+// Save to App data directory
+const appDataDir = path.join(__dirname, 'app', 'src', 'data');
+if (fs.existsSync(appDataDir)) {
+  fs.writeFileSync(path.join(appDataDir, 'questions-2025.json'), JSON.stringify(q2025, null, 2));
+  fs.writeFileSync(path.join(appDataDir, 'questions-2026.json'), JSON.stringify(q2026, null, 2));
+  console.log('Saved JSON files to React App (app/src/data/)!');
+} else {
+  console.warn('React App data directory not found at', appDataDir);
+}
+
+// Save to WeChat Mini Program data directory
+const wechatDataDir = path.join(__dirname, 'wechat-miniprogram', 'data');
+if (fs.existsSync(wechatDataDir)) {
+  fs.writeFileSync(path.join(wechatDataDir, 'questions-2025.js'), `module.exports = ${JSON.stringify(q2025, null, 2)};\n`);
+  fs.writeFileSync(path.join(wechatDataDir, 'questions-2026.js'), `module.exports = ${JSON.stringify(q2026, null, 2)};\n`);
+  console.log('Saved JS files to WeChat Mini Program (wechat-miniprogram/data/)!');
+} else {
+  console.warn('WeChat Mini Program data directory not found at', wechatDataDir);
+}
 
 // Validation Check
 function validate(questions, label) {

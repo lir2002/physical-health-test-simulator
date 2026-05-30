@@ -10,18 +10,16 @@ A Chinese-language exam-prep web app for the 2026 Shenzhen "体育与健康" (Ph
 
 The repo has two distinct halves:
 
-- **Root** — the **data pipeline**. `parse.js` (a CommonJS Node script) reads the human-authored markdown question sources `Questions-2025.md` and `Questions-predict-2026.md` and emits `questions-2025.json` / `questions-2026.json`.
+- **Root** — the **data pipeline**. `parse.js` (a CommonJS Node script) reads the human-authored markdown question sources `Questions-2025.md` and `Questions-predict-2026.md` and generates structured JSON and JS modules, automatically writing them to the root, `app/src/data/`, and `wechat-miniprogram/data/` directories to keep both platforms in sync.
 - **`app/`** — the **Vite + React 19 + Capacitor application**. All run/build/lint commands must be run from inside `app/`.
-
-> **Critical gotcha:** `parse.js` writes JSON to the **repo root**, but the app imports from `app/src/data/`. After regenerating, you must copy the generated files into `app/src/data/`. The two locations are not symlinked or auto-synced.
+- **`wechat-miniprogram/`** — the **WeChat Mini Program** codebase. Runs directly inside WeChat Developer Tools.
 
 ## Commands
 
 Data regeneration (from repo root):
 ```
-node parse.js            # parses the .md sources, prints validation, writes root JSON
+node parse.js            # parses the .md sources, validates, and automatically writes/syncs JSON to app/ and JS modules to wechat-miniprogram/
 ```
-Then copy `questions-2025.json` / `questions-2026.json` into `app/src/data/`.
 
 App development (from `app/`):
 ```
