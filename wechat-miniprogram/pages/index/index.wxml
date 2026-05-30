@@ -176,6 +176,7 @@
     <view class="disclaimer-footer">
       <text class="disclaimer-text">⚠️ 免责声明：本系统所包含的试题、答案及解析均收集整理自互联网公开渠道，仅用于个人学习交流、模拟测试与研究参考，版权归原作者或原出处所有。如有侵权，请联系删除。</text>
       <button class="btn-contact" open-type="contact">💬 联系作者 / 反馈问题</button>
+      <text class="copyright-text">© 2026 Physical Health Test Simulator. Open sourced under the MIT License.</text>
     </view>
   </view>
 
